@@ -1,0 +1,20 @@
+# Python & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Data files (keep scripts and CSV results, ignore raw binary parquets and zip archives)
+data/*.parquet
+data/train/*.parquet
+data/dev/*.parquet
+data/private/*.parquet
+*.zip
+*.log
+
+# IDE & OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
