@@ -7,12 +7,12 @@ import os
 # Base Directories
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, "data")
-TRAIN_DIR = os.path.join(DATA_DIR, "train")
-DEV_DIR = os.path.join(DATA_DIR, "dev")
+PRIVATE_DIR = os.path.join(DATA_DIR, "private")
 
-# Zip Archive Paths
-TRAIN_ZIP_PATH = r"C:\Users\Arvind\OneDrive\Documents\train_pack.zip"
-DEV_ZIP_PATH = r"C:\Users\Arvind\OneDrive\Documents\dev_pack.zip"
+# Zip Archive Paths (relative to BASE_DIR or parent directory if present)
+TRAIN_ZIP_PATH = os.path.join(BASE_DIR, "train_pack.zip") if os.path.exists(os.path.join(BASE_DIR, "train_pack.zip")) else os.path.join(os.path.dirname(BASE_DIR), "train_pack.zip")
+DEV_ZIP_PATH = os.path.join(BASE_DIR, "dev_pack.zip") if os.path.exists(os.path.join(BASE_DIR, "dev_pack.zip")) else os.path.join(os.path.dirname(BASE_DIR), "dev_pack.zip")
+PRIVATE_ZIP_PATH = os.path.join(BASE_DIR, "private_pack.zip") if os.path.exists(os.path.join(BASE_DIR, "private_pack.zip")) else os.path.join(os.path.dirname(BASE_DIR), "private_pack.zip")
 
 # Preprocessing & Quality Filtering
 QUALITY_BITMASK_DROP = 0  # Default: drop any non-zero quality cadence

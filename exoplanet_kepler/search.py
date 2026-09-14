@@ -72,7 +72,7 @@ def coarse_fine_bls_search(t: np.ndarray, f: np.ndarray, grid_type: str = "unifo
 
     bls = BoxLeastSquares(t, f)
     baseline = t.max() - t.min()
-    pmax = min(PERIOD_MAX, baseline / 2.0)  # Support periods up to baseline / 2
+    pmax = min(PERIOD_MAX, baseline / 2.5)  # Require at least ~2.5 - 3 transits for search robustness
 
     if pmax <= PERIOD_MIN:
         pmax = PERIOD_MIN + 1.0
@@ -80,11 +80,11 @@ def coarse_fine_bls_search(t: np.ndarray, f: np.ndarray, grid_type: str = "unifo
     # 1. --- Coarse Sweep Grid Construction ---
     durations = np.array(DURATIONS_DAYS)
     if grid_type == "uniform_freq":
-        # Uniform frequency grid: dfreq = 1 / (4 * baseline) => trial period resolution scales as P^2
+        # Uniform frequency grid: dfreq = 1 / (5 * baseline) => enhanced resolution for P > 100 days
         f_min = 1.0 / pmax
         f_max = 1.0 / PERIOD_MIN
-        dfreq = 1.0 / (4.0 * baseline)
-        n_freqs = min(N_COARSE, max(2000, int((f_max - f_min) / dfreq)))
+        dfreq = 1.0 / (5.0 * baseline)
+        n_freqs = min(N_COARSE, max(3000, int((f_max - f_min) / dfreq)))
         freqs = np.linspace(f_min, f_max, n_freqs)
         coarse_periods = 1.0 / freqs[::-1]
     else:

@@ -23,14 +23,21 @@ def detrend_running_median(t: np.ndarray, f: np.ndarray, ferr: np.ndarray, q: np
     return t_clean, f_clean, ferr_clean, q_clean, trend_clean
 
 
-def detrend_savgol(t: np.ndarray, f: np.ndarray, ferr: np.ndarray, q: np.ndarray, window_days: float = SAVGOL_WINDOW_DAYS, polyorder: int = SAVGOL_POLYORDER, n_iter: int = 3):
+def detrend_savgol(t: np.ndarray, f: np.ndarray, ferr: np.ndarray, q: np.ndarray, window_days: float = SAVGOL_WINDOW_DAYS, polyorder: int = SAVGOL_POLYORDER, n_iter: int = 3, adaptive: bool = True):
     """
-    3-Pass Iterative Savitzky-Golay detrending with in-transit masking.
+    3-Pass Iterative Savitzky-Golay detrending with in-transit masking & adaptive window length.
     Iteratively detects dips below 2.5 sigma, interpolates over candidate transit regions,
     and refits the trend to prevent flattening of genuine transits.
+    Adaptive window scaling ensures long-duration transits on wide baselines are preserved.
     """
     cadence = np.median(np.diff(t))
-    window_length = max(polyorder + 2, int(window_days / cadence) | 1)
+    t_span = t[-1] - t[0] if len(t) > 1 else 1.0
+
+    effective_window_days = window_days
+    if adaptive and t_span > 100.0:
+        effective_window_days = max(window_days, min(3.0, t_span / 150.0))
+
+    window_length = max(polyorder + 2, int(effective_window_days / cadence) | 1)
 
     f_fit = f.copy()
     trend = savgol_filter(f_fit, window_length, polyorder)

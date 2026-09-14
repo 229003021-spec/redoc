@@ -53,7 +53,7 @@ RAW KEPLER PARQUET & LABELS
             │
             ▼
 ┌───────────────────────────┐
-│ 7. Final Submission CSV   │  (89 stars, validated schema, non-null parameters for positives)
+│ 7. Final Submission CSV   │  (87 stars, 88 lines total: STAR_0000 to STAR_0086)
 └───────────┬───────────────┘
 ```
 
@@ -67,12 +67,13 @@ RAW KEPLER PARQUET & LABELS
 - Applies positive 5-sigma outlier clipping to remove stellar flares and cosmic ray hits without clipping transit dips.
 
 ### 2. Detrending (`exoplanet_kepler/detrending.py`)
-- Uses a Savitzky-Golay filter with iterative in-transit masking.
-- Initial trend fit identifies candidate dips ($>3\sigma$ below median), masks them out, and refits the baseline trend. This prevents detrending filters from flattening shallow transits.
+- Uses adaptive window 3-pass Savitzky-Golay filtering with in-transit masking.
+- Initial trend fit identifies candidate dips ($>2.5\sigma$ below median), masks them out, and refits the baseline trend. This prevents detrending filters from flattening long-duration or shallow transits.
 
 ### 3. Coarse-to-Fine BLS Search (`exoplanet_kepler/search.py`)
-- Searches period space from $3.0$ to $400.0$ days.
-- Stage 1: Coarse logarithmic grid evaluation to capture candidate frequency modes rapidly.
+- Searches period space from $3.0$ to $400.0$ days with $P_{\text{max}} = \text{baseline} / 2.5$ policy (requiring $\ge 3$ transits).
+- Uniform frequency grid resolution $\Delta \nu = 1 / (5 \times \text{baseline})$ to sample long periods ($P > 100\text{ days}$) densely.
+- Stage 1: Uniform frequency coarse sweep.
 - Stage 2: Top 8 peak selection with neighborhood exclusion.
 - Stage 3: Fine grid evaluation around candidates to pinpoint true orbital period $P$, epoch $T_0$, transit depth $\delta$, and duration $W$. Calculates Signal Detection Efficiency (SDE).
 
@@ -85,28 +86,30 @@ RAW KEPLER PARQUET & LABELS
   - `depth_to_scatter`: Transit depth normalized by local out-of-transit scatter.
 
 ### 5. Calibrated Machine Learning Classifier (`exoplanet_kepler/classifier.py`)
-- Uses `HistGradientBoostingClassifier` with `CalibratedClassifierCV` (Platt scaling cross-validation).
-- Delivers well-calibrated confidence probabilities suitable for judge evaluation.
+- Uses `HistGradientBoostingClassifier` with locked threshold ($0.10$) derived strictly from 5-Fold Train OOF CV.
+- Delivers calibrated confidence probabilities suitable for judge ranking.
 
 ---
 
 ## Reproducibility & Execution Instructions
 
 ### Environment Setup
-Python 3.12+ with standard packages:
+Python 3.10+ with pinned dependencies:
 ```bash
-pip install pandas numpy scipy astropy scikit-learn fastparquet pyarrow
+pip install -r requirements.txt
 ```
 
-### Reproduce Evaluation & Submission
-1. **Run Dev Evaluation Benchmark**:
+### Single Command Execution
+
+1. **Run Full Pipeline Evaluation & Dev Benchmark**:
 ```bash
-python scripts/run_pipeline_eval.py data/dev
+python scripts/run_pipeline_eval.py
 ```
 
-2. **Generate Final Submission File**:
+2. **Generate & Validate Official Competition Submission (`submission_redoc.csv`)**:
 ```bash
-python scripts/generate_submission.py data/dev
+python scripts/infer_private_set.py
 ```
 
-Output: `submission.csv` containing final predictions for target evaluation set.
+Output: `submission_redoc.csv` containing predictions for all 87 private set stars (`STAR_0000` through `STAR_0086`), formatted in exactly 88 raw lines and fully verified against competition rules.
+

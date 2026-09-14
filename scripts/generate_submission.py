@@ -23,18 +23,20 @@ def process_private_star(path):
     """
     Helper function to process a single private set star.
     """
-    sid = os.path.basename(path)[:-8] # e.g. STAR_0001
+    sid = os.path.splitext(os.path.basename(path))[0]
     try:
         df = pd.read_parquet(path)
         t_raw, f_raw, ferr_raw, q_raw = clean_lightcurve(df)
         if t_raw is None or len(t_raw) < 500:
+            print(f"Warning: Star {sid} has insufficient cadences (< 500)")
             candidate = {}
             feats = {col: 0.0 for col in FEATURE_COLS}
         else:
-            t, f, trend = detrend_lightcurve(t_raw, f_raw, method="savgol", window_days=1.0)
+            t, f, ferr, q, trend = detrend_lightcurve(t_raw, f_raw, ferr_raw, q_raw, method="savgol", window_days=1.0)
             candidate = coarse_fine_bls_search(t, f)
-            feats = extract_candidate_features(t, f, q_raw[:len(t)], candidate)
+            feats = extract_candidate_features(t, f, q, candidate)
     except Exception as e:
+        print(f"Error processing star {sid}: {e}")
         candidate = {}
         feats = {col: 0.0 for col in FEATURE_COLS}
 
@@ -73,7 +75,7 @@ def generate_and_validate_submission(private_dir, output_csv="submission.csv"):
     print(f"Generating predictions for {n_paths} private evaluation set stars using {os.cpu_count()} CPU cores...")
 
     t0 = time.time()
-    results = Parallel(n_jobs=-1, batch_size=4)(
+    results = Parallel(n_jobs=4, backend="threading")(
         delayed(process_private_star)(p) for p in paths
     )
     print(f"Completed private set processing in {time.time() - t0:.1f}s.")

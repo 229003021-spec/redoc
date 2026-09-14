@@ -5,9 +5,13 @@ Script to extract train_pack.zip and dev_pack.zip into local data directory.
 import os
 import zipfile
 
-TRAIN_ZIP = r"C:\Users\Arvind\OneDrive\Documents\train_pack.zip"
-DEV_ZIP = r"C:\Users\Arvind\OneDrive\Documents\dev_pack.zip"
-DATA_DIR = r"c:\Users\Arvind\OneDrive\Documents\exoplanet_kepler_pipeline\data"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+PARENT_DIR = os.path.dirname(BASE_DIR)
+
+TRAIN_ZIP = os.path.join(PARENT_DIR, "train_pack.zip") if os.path.exists(os.path.join(PARENT_DIR, "train_pack.zip")) else os.path.join(BASE_DIR, "train_pack.zip")
+DEV_ZIP = os.path.join(PARENT_DIR, "dev_pack.zip") if os.path.exists(os.path.join(PARENT_DIR, "dev_pack.zip")) else os.path.join(BASE_DIR, "dev_pack.zip")
+PRIVATE_ZIP = os.path.join(PARENT_DIR, "private_pack.zip") if os.path.exists(os.path.join(PARENT_DIR, "private_pack.zip")) else os.path.join(BASE_DIR, "private_pack.zip")
 
 
 def extract_zips():

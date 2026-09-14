@@ -7,7 +7,7 @@ import os
 import pandas as pd
 
 def generate_official_submission_redoc():
-    base_dir = r"c:\Users\Arvind\OneDrive\Documents\exoplanet_kepler_pipeline"
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     sub_orig_path = os.path.join(base_dir, "submission.csv")
     out_path = os.path.join(base_dir, "submission_redoc.csv")
 
