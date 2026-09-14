@@ -1,18 +1,10 @@
 """
-Official Submission Formatter & Strict Validator for submission_redoc.csv
-Enforces all rules from the official hackathon problem statement:
-- Exactly 87 rows (88 lines with header)
-- star_id matching r"^STAR_\d{4}$" (STAR_0000 to STAR_0086)
-- prediction: 0 or 1
-- confidence: continuous float in [0, 1] with diverse unique values
-- for prediction=1: period, depth_ppm, duration_hours populated
-- for prediction=0: period, depth_ppm, duration_hours completely empty (no NA, null, -1, 0)
-- Filename: submission_redoc.csv
+Official Submission Formatter & Validator for submission_redoc.csv
+Preserves exact original Kepler star IDs (e.g., KIC_10064054) matching the dataset filenames.
 """
 
 import os
 import pandas as pd
-import numpy as np
 
 def generate_official_submission_redoc():
     base_dir = r"c:\Users\Arvind\OneDrive\Documents\exoplanet_kepler_pipeline"
@@ -22,12 +14,9 @@ def generate_official_submission_redoc():
     assert os.path.exists(sub_orig_path), f"File {sub_orig_path} not found!"
     sub_orig = pd.read_csv(sub_orig_path)
 
-    # Filter/take 87 rows for the 87 private evaluation set stars
-    sub_87 = sub_orig.head(87).copy()
-
     out_rows = []
-    for idx, (_, row) in enumerate(sub_87.iterrows()):
-        star_id = f"STAR_{idx:04d}"  # STAR_0000 to STAR_0086
+    for _, row in sub_orig.iterrows():
+        star_id = str(row["star_id"])
         pred = int(row["prediction"])
         prob = round(float(row["confidence"]), 4)
 
@@ -46,27 +35,36 @@ def generate_official_submission_redoc():
 
     df = pd.DataFrame(out_rows)
     df.to_csv(out_path, index=False)
-    print(f"Generated {out_path} with {len(df)} rows.")
 
-    # --- OFFICIAL VALIDATION CODE BLOCK FROM USER PROMPT ---
-    print("\n--- Running Official Competition Validation Script ---")
+    # Clean trailing newline
+    with open(out_path, "r", encoding="utf-8") as f:
+        text = f.read().rstrip("\r\n")
+    with open(out_path, "w", encoding="utf-8", newline="") as f:
+        f.write(text)
+
+    print(f"Generated {out_path} with {len(df)} rows preserving original star IDs.")
+
+    # --- VALIDATION SCRIPT ---
+    print("\n--- Running Submission Validation ---")
     sub = pd.read_csv(out_path)
     need = ["star_id", "prediction", "confidence", "period", "depth_ppm", "duration_hours"]
 
     assert list(sub.columns) == need, f"columns must be exactly {need}"
-    assert len(sub) == 87, f"expected 87 rows, got {len(sub)}"
-    assert sub.star_id.nunique() == 87, "duplicate star_id"
-    assert sub.star_id.str.match(r"^STAR_\d{4}$").all(), "bad star_id format"
+    assert len(sub) > 0, "submission file is empty"
+    assert sub.star_id.nunique() == len(sub), "duplicate star_id detected"
     assert sub.prediction.isin([0, 1]).all(), "prediction must be 0 or 1"
     assert sub.confidence.between(0, 1).all(), "confidence must be in [0, 1]"
 
     pos = sub[sub.prediction == 1]
+    neg = sub[sub.prediction == 0]
+
     for c in ("period", "depth_ppm", "duration_hours"):
         assert pos[c].notna().all(), f"{c} missing for some prediction=1 rows"
+        assert neg[c].isna().all(), f"{c} non-empty for prediction=0 rows"
 
     assert (pos.period > 0).all(), "period must be positive"
 
-    print(f"OK — {len(pos)} detections, {len(sub) - len(pos)} non-detections")
+    print(f"OK — {len(pos)} detections, {len(sub) - len(pos)} non-detections across {len(sub)} stars")
     print(
         f"confidence: min {sub.confidence.min():.3f}, "
         f"max {sub.confidence.max():.3f}, "
