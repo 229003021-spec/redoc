@@ -23,26 +23,26 @@ def detrend_running_median(t: np.ndarray, f: np.ndarray, ferr: np.ndarray, q: np
     return t_clean, f_clean, ferr_clean, q_clean, trend_clean
 
 
-def detrend_savgol(t: np.ndarray, f: np.ndarray, ferr: np.ndarray, q: np.ndarray, window_days: float = SAVGOL_WINDOW_DAYS, polyorder: int = SAVGOL_POLYORDER, n_iter: int = 3, adaptive: bool = True):
+def detrend_savgol(t: np.ndarray, f: np.ndarray, ferr: np.ndarray, q: np.ndarray, window_days: float = SAVGOL_WINDOW_DAYS, polyorder: int = SAVGOL_POLYORDER, n_iter: int = 4, adaptive: bool = True):
     """
-    3-Pass Iterative Savitzky-Golay detrending with in-transit masking & adaptive window length.
-    Iteratively detects dips below 2.5 sigma, interpolates over candidate transit regions,
-    and refits the trend to prevent flattening of genuine transits.
-    Adaptive window scaling ensures long-duration transits on wide baselines are preserved.
+    Enhanced 2-Pass Multi-Scale Iterative Savitzky-Golay detrending with robust in-transit masking.
+    - Adaptive window length up to 4.5 days for long lightcurve baselines.
+    - Aggressive 2.0-sigma in-transit dip masking with 15% max mask fraction safety bound.
+    - Second pass smoother fit over masked flux array to preserve wide, shallow transits without erosion.
     """
     cadence = np.median(np.diff(t))
     t_span = t[-1] - t[0] if len(t) > 1 else 1.0
 
     effective_window_days = window_days
     if adaptive and t_span > 100.0:
-        effective_window_days = max(window_days, min(3.0, t_span / 150.0))
+        effective_window_days = max(window_days, min(4.5, t_span / 80.0))
 
-    window_length = max(polyorder + 2, int(effective_window_days / cadence) | 1)
+    window_length_p1 = max(polyorder + 2, int(effective_window_days / cadence) | 1)
 
     f_fit = f.copy()
-    trend = savgol_filter(f_fit, window_length, polyorder)
+    trend = savgol_filter(f_fit, window_length_p1, polyorder)
 
-    # 3-Pass Iterative In-Transit Masking with max_mask_frac safety bound (15%)
+    # Pass 1: Iterative In-Transit Masking at 2.0-sigma dip threshold with 15% safety limit
     max_masked = int(0.15 * len(f))
     for iter_idx in range(n_iter):
         norm_f = f_fit / trend
@@ -50,21 +50,24 @@ def detrend_savgol(t: np.ndarray, f: np.ndarray, ferr: np.ndarray, q: np.ndarray
         mad = np.nanmedian(np.abs(res))
         sig = 1.4826 * mad
 
-        # Identify candidate transit dips below 2.5 sigma
-        in_transit = res < -2.5 * sig
+        # Identify candidate transit dips below 2.0 sigma
+        in_transit = res < -2.0 * sig
         n_in = np.sum(in_transit)
 
         if n_in > 0 and n_in <= max_masked and (len(f) - n_in) > 50:
             f_fit[in_transit] = np.interp(t[in_transit], t[~in_transit], f[~in_transit])
-            trend = savgol_filter(f_fit, window_length, polyorder)
+            trend = savgol_filter(f_fit, window_length_p1, polyorder)
         elif n_in > max_masked:
-            # Mask only top deepest 15% points to prevent over-masking noisy stars
             deepest_indices = np.argsort(res)[:max_masked]
             f_fit[deepest_indices] = np.interp(t[deepest_indices], t[~in_transit], f[~in_transit])
-            trend = savgol_filter(f_fit, window_length, polyorder)
+            trend = savgol_filter(f_fit, window_length_p1, polyorder)
             break
         else:
             break
+
+    # Pass 2: Re-fit smooth baseline using longer window (1.5x) on masked flux array
+    window_length_p2 = max(polyorder + 2, int((1.5 * effective_window_days) / cadence) | 1)
+    trend = savgol_filter(f_fit, window_length_p2, polyorder)
 
     ok = np.isfinite(trend) & (trend > 0)
     t_clean = t[ok]
