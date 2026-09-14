@@ -166,8 +166,35 @@ def coarse_fine_bls_search(t: np.ndarray, f: np.ndarray, grid_type: str = "unifo
         if (best_candidate is None or score > best_candidate["sde"]) and depth_ppm > 0:
             best_candidate = candidate
 
+    if best_candidate is not None:
+        # 4. --- Residual Signal Search if SDE > 10.0 ---
+        if best_candidate["sde"] > 10.0:
+            p_best = best_candidate["period"]
+            t0_best = best_candidate["t0"]
+            dur_h_best = best_candidate["duration_hours"]
+
+            phase_best = ((t - t0_best) / p_best) % 1.0
+            phase_best = np.where(phase_best > 0.5, phase_best - 1.0, phase_best)
+            out_pri_mask = np.abs(phase_best) >= (1.5 * dur_h_best / (24.0 * 2.0 * p_best))
+
+            if np.sum(out_pri_mask) > 500:
+                t_res, f_res = t[out_pri_mask], f[out_pri_mask]
+                try:
+                    bls_res = BoxLeastSquares(t_res, f_res)
+                    coarse_res_p = bls_res.power(coarse_periods, durations, objective="likelihood")
+                    c_pow = np.asarray(coarse_res_p.power)
+                    best_j_res = int(np.nanargmax(c_pow))
+                    res_sde = calculate_sde(c_pow, best_j_res)
+                    best_candidate["residual_sde"] = float(res_sde)
+                except Exception:
+                    best_candidate["residual_sde"] = 0.0
+            else:
+                best_candidate["residual_sde"] = 0.0
+        else:
+            best_candidate["residual_sde"] = 0.0
+
     return best_candidate or {
         "period": np.nan, "depth_ppm": np.nan, "duration_hours": np.nan,
         "t0": np.nan, "sde": 0.0, "snr": 0.0, "n_transits_expected": 0, "n_in_transit_points": 0,
-        "alias_ratio_half": 0.0, "alias_ratio_double": 0.0, "alias_ratio_triple": 0.0
+        "alias_ratio_half": 0.0, "alias_ratio_double": 0.0, "alias_ratio_triple": 0.0, "residual_sde": 0.0
     }

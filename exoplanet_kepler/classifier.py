@@ -12,8 +12,9 @@ from .config import SDE_BASELINE_THRESHOLD
 FEATURE_COLS = [
     "sde", "snr", "period", "depth_ppm", "duration_hours",
     "n_transits_expected", "n_in_transit_points",
-    "odd_even_ratio", "odd_even_diff_sig", "sec_depth_ratio",
-    "quarter_recurrence", "scatter_ppm", "scatter_mad_ppm",
+    "odd_even_ratio", "odd_even_diff_sig", "sec_depth_ratio", "sec_depth_sig",
+    "quarter_recurrence", "v_shape_metric", "local_snr", "residual_sde",
+    "scatter_ppm", "scatter_mad_ppm",
     "depth_to_scatter", "radius_ratio",
     "alias_ratio_half", "alias_ratio_double", "alias_ratio_triple"
 ]

@@ -4,7 +4,7 @@ Extracts astrophysical, signal-to-noise, and vetting features.
 """
 
 import numpy as np
-from .vetting import check_odd_even_consistency, check_secondary_eclipse, check_quarter_recurrence
+from .vetting import check_odd_even_consistency, check_secondary_eclipse_details, check_quarter_recurrence, check_transit_shape_metric, check_local_snr
 
 
 def extract_candidate_features(t: np.ndarray, f: np.ndarray, q: np.ndarray, candidate: dict) -> dict:
@@ -22,6 +22,7 @@ def extract_candidate_features(t: np.ndarray, f: np.ndarray, q: np.ndarray, cand
     r_half = candidate.get("alias_ratio_half", 0.0)
     r_double = candidate.get("alias_ratio_double", 0.0)
     r_triple = candidate.get("alias_ratio_triple", 0.0)
+    residual_sde = candidate.get("residual_sde", 0.0)
 
     # Out-of-transit scatter evaluation
     if f is not None and len(f) > 0:
@@ -37,12 +38,16 @@ def extract_candidate_features(t: np.ndarray, f: np.ndarray, q: np.ndarray, cand
     # Scientific vetting metrics
     if t is not None and len(t) > 500 and not np.isnan(period) and period > 0:
         odd_even_ratio, odd_even_diff_sig = check_odd_even_consistency(t, f, period, t0, duration_hours)
-        sec_ratio = check_secondary_eclipse(t, f, period, t0, duration_hours)
+        sec_ratio, sec_depth_sig = check_secondary_eclipse_details(t, f, period, t0, duration_hours)
         quarter_rec = check_quarter_recurrence(t, f, q, period, t0, duration_hours)
+        v_shape_metric = check_transit_shape_metric(t, f, period, t0, duration_hours)
+        local_snr = check_local_snr(t, f, period, t0, duration_hours)
     else:
         odd_even_ratio, odd_even_diff_sig = 1.0, 0.0
-        sec_ratio = 0.0
+        sec_ratio, sec_depth_sig = 0.0, 0.0
         quarter_rec = 1.0
+        v_shape_metric = 1.0
+        local_snr = 0.0
 
     return {
         "sde": float(sde),
@@ -55,7 +60,11 @@ def extract_candidate_features(t: np.ndarray, f: np.ndarray, q: np.ndarray, cand
         "odd_even_ratio": float(odd_even_ratio),
         "odd_even_diff_sig": float(odd_even_diff_sig),
         "sec_depth_ratio": float(sec_ratio),
+        "sec_depth_sig": float(sec_depth_sig),
         "quarter_recurrence": float(quarter_rec),
+        "v_shape_metric": float(v_shape_metric),
+        "local_snr": float(local_snr),
+        "residual_sde": float(residual_sde),
         "scatter_ppm": float(scatter_std_ppm),
         "scatter_mad_ppm": float(scatter_mad_ppm),
         "depth_to_scatter": float(depth_to_scatter),

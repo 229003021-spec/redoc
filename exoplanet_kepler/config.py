@@ -31,7 +31,7 @@ N_COARSE = 10000         # Number of coarse trial periods (log-spaced)
 N_PEAKS = 8               # Top coarse periodogram peaks to refine
 N_FINE = 600              # Refinement trial periods around each coarse peak
 FINE_WINDOW_FRAC = 0.02   # +/- 2% period refinement window
-DURATIONS_DAYS = [0.05, 0.10, 0.20, 0.40, 0.80] # Candidate transit durations
+DURATIONS_DAYS = [0.05, 0.10, 0.20, 0.40, 0.80, 1.20] # Candidate transit durations in days
 
 # Candidate Vetting & Scoring Thresholds
 SDE_BASELINE_THRESHOLD = 10.0

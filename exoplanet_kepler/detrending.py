@@ -42,7 +42,8 @@ def detrend_savgol(t: np.ndarray, f: np.ndarray, ferr: np.ndarray, q: np.ndarray
     f_fit = f.copy()
     trend = savgol_filter(f_fit, window_length, polyorder)
 
-    # 3-Pass Iterative In-Transit Masking
+    # 3-Pass Iterative In-Transit Masking with max_mask_frac safety bound (15%)
+    max_masked = int(0.15 * len(f))
     for iter_idx in range(n_iter):
         norm_f = f_fit / trend
         res = norm_f - 1.0
@@ -53,9 +54,15 @@ def detrend_savgol(t: np.ndarray, f: np.ndarray, ferr: np.ndarray, q: np.ndarray
         in_transit = res < -2.5 * sig
         n_in = np.sum(in_transit)
 
-        if n_in > 0 and (len(f) - n_in) > 50:
+        if n_in > 0 and n_in <= max_masked and (len(f) - n_in) > 50:
             f_fit[in_transit] = np.interp(t[in_transit], t[~in_transit], f[~in_transit])
             trend = savgol_filter(f_fit, window_length, polyorder)
+        elif n_in > max_masked:
+            # Mask only top deepest 15% points to prevent over-masking noisy stars
+            deepest_indices = np.argsort(res)[:max_masked]
+            f_fit[deepest_indices] = np.interp(t[deepest_indices], t[~in_transit], f[~in_transit])
+            trend = savgol_filter(f_fit, window_length, polyorder)
+            break
         else:
             break
 
