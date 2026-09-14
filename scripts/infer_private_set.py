@@ -86,7 +86,7 @@ def run_private_inference(private_dir=None, output_csv="submission_redoc.csv"):
     print(f"\nProcessing {len(paths)} private evaluation set stars in {private_dir}...")
 
     t0 = time.time()
-    results = Parallel(n_jobs=-1, batch_size=4)(
+    results = Parallel(n_jobs=4, backend="threading")(
         delayed(process_private_star_file)(p) for p in paths
     )
     print(f"Completed private set analysis in {time.time() - t0:.1f}s.")
