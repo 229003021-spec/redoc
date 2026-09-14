@@ -1,77 +1,80 @@
 """
 Detrending module for removing stellar variability and instrumental systematics.
+Supports 3-pass iterative in-transit masked Savitzky-Golay detrending and running median fallback.
 """
 
 import numpy as np
 import pandas as pd
 from scipy.signal import savgol_filter
-from scipy.interpolate import UnivariateSpline
 from .config import DETREND_WINDOW_DAYS, SAVGOL_WINDOW_DAYS, SAVGOL_POLYORDER
 
 
-def detrend_running_median(t: np.ndarray, f: np.ndarray, window_days: float = DETREND_WINDOW_DAYS):
+def detrend_running_median(t: np.ndarray, f: np.ndarray, ferr: np.ndarray, q: np.ndarray, window_days: float = DETREND_WINDOW_DAYS):
     """
-    Quarter-wise running median detrending.
+    Running median detrending maintaining array alignment.
     """
     cadence = np.median(np.diff(t))
-    k = max(5, int(window_days / cadence) | 1) # Force odd window length
+    k = max(5, int(window_days / cadence) | 1)  # Force odd window length
     trend = pd.Series(f).rolling(k, center=True, min_periods=k // 3).median().values
 
     ok = np.isfinite(trend) & (trend > 0)
-    return t[ok], f[ok] / trend[ok], trend[ok]
+    t_clean, f_clean, ferr_clean, q_clean, trend_clean = t[ok], f[ok] / trend[ok], ferr[ok] / trend[ok], q[ok], trend[ok]
+    assert len(t_clean) == len(f_clean) == len(ferr_clean) == len(q_clean) == len(trend_clean), "Median detrending alignment mismatch!"
+    return t_clean, f_clean, ferr_clean, q_clean, trend_clean
 
 
-def detrend_savgol(t: np.ndarray, f: np.ndarray, window_days: float = SAVGOL_WINDOW_DAYS, polyorder: int = SAVGOL_POLYORDER, mask_transits: bool = True):
+def detrend_savgol(t: np.ndarray, f: np.ndarray, ferr: np.ndarray, q: np.ndarray, window_days: float = SAVGOL_WINDOW_DAYS, polyorder: int = SAVGOL_POLYORDER, n_iter: int = 3):
     """
-    Savitzky-Golay detrending with optional iterative in-transit masking.
-    Masking in-transit points prevents Savitzky-Golay from pulling down the trend line into transits.
+    3-Pass Iterative Savitzky-Golay detrending with in-transit masking.
+    Iteratively detects dips below 2.5 sigma, interpolates over candidate transit regions,
+    and refits the trend to prevent flattening of genuine transits.
     """
     cadence = np.median(np.diff(t))
     window_length = max(polyorder + 2, int(window_days / cadence) | 1)
 
-    # Initial Savitzky-Golay fit
-    trend = savgol_filter(f, window_length, polyorder)
+    f_fit = f.copy()
+    trend = savgol_filter(f_fit, window_length, polyorder)
 
-    if mask_transits:
-        # Identify negative dips below 2.5 sigma and temporarily mask them
-        norm_f = f / trend
+    # 3-Pass Iterative In-Transit Masking
+    for iter_idx in range(n_iter):
+        norm_f = f_fit / trend
         res = norm_f - 1.0
-        mad = np.median(np.abs(res - np.median(res)))
+        mad = np.nanmedian(np.abs(res))
         sig = 1.4826 * mad
-        in_transit = res < -2.5 * sig
 
-        if np.sum(in_transit) > 0 and np.sum(~in_transit) > 50:
-            # Interpolate trend over masked points
-            f_masked = f.copy()
-            f_masked[in_transit] = np.interp(t[in_transit], t[~in_transit], f[~in_transit])
-            trend = savgol_filter(f_masked, window_length, polyorder)
+        # Identify candidate transit dips below 2.5 sigma
+        in_transit = res < -2.5 * sig
+        n_in = np.sum(in_transit)
+
+        if n_in > 0 and (len(f) - n_in) > 50:
+            f_fit[in_transit] = np.interp(t[in_transit], t[~in_transit], f[~in_transit])
+            trend = savgol_filter(f_fit, window_length, polyorder)
+        else:
+            break
 
     ok = np.isfinite(trend) & (trend > 0)
-    return t[ok], f[ok] / trend[ok], trend[ok]
+    t_clean = t[ok]
+    f_clean = f[ok] / trend[ok]
+    ferr_clean = ferr[ok] / trend[ok]
+    q_clean = q[ok]
+    trend_clean = trend[ok]
+
+    assert len(t_clean) == len(f_clean) == len(ferr_clean) == len(q_clean) == len(trend_clean), "Savitzky-Golay detrending alignment mismatch!"
+    return t_clean, f_clean, ferr_clean, q_clean, trend_clean
 
 
-def detrend_lightcurve(t: np.ndarray, f: np.ndarray, method: str = "savgol", window_days: float = 1.0):
+def detrend_lightcurve(t: np.ndarray, f: np.ndarray, ferr: np.ndarray = None, q: np.ndarray = None, method: str = "savgol", window_days: float = 1.0):
     """
-    Master function to apply light curve detrending.
-
-    Parameters
-    ----------
-    t : np.ndarray
-        Time array.
-    f : np.ndarray
-        Quarter-normalized flux array.
-    method : str
-        'savgol' or 'median'.
-    window_days : float
-        Filter window size in days.
-
-    Returns
-    -------
-    t_clean, f_detrended, trend
+    Master detrending function ensuring array alignment across all inputs.
     """
+    if ferr is None:
+        ferr = np.zeros_like(f)
+    if q is None:
+        q = np.zeros(len(f), dtype=int)
+
     if method == "savgol":
-        return detrend_savgol(t, f, window_days=window_days)
+        return detrend_savgol(t, f, ferr, q, window_days=window_days)
     elif method == "median":
-        return detrend_running_median(t, f, window_days=window_days)
+        return detrend_running_median(t, f, ferr, q, window_days=window_days)
     else:
-        return detrend_savgol(t, f, window_days=window_days)
+        return detrend_savgol(t, f, ferr, q, window_days=window_days)

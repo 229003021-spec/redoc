@@ -1,7 +1,7 @@
 """
 Fast Direct Inference Script on Private Dataset (STAR_0001 to STAR_0087).
-Uses pre-trained candidate features from dev_benchmark_predictions.csv to train the ML classifier instantaneously,
-then processes all 87 private set stars in parallel using 8 CPU cores.
+Uses locked decision threshold from Train Out-Of-Fold CV (zero leakage),
+processes all 87 private set stars in parallel using 8 CPU cores.
 Outputs submission_redoc.csv matching all competition assertions.
 """
 
@@ -19,6 +19,7 @@ from exoplanet_kepler.detrending import detrend_lightcurve
 from exoplanet_kepler.search import coarse_fine_bls_search
 from exoplanet_kepler.features import extract_candidate_features
 from exoplanet_kepler.classifier import ExoplanetCandidateClassifier, FEATURE_COLS
+from scripts.run_pipeline_eval import process_dataset_cached, run_oof_cv_threshold_selection
 
 
 def process_private_star_file(path):
@@ -34,9 +35,9 @@ def process_private_star_file(path):
             candidate = {}
             feats = {col: 0.0 for col in FEATURE_COLS}
         else:
-            t, f, trend = detrend_lightcurve(t_raw, f_raw, method="savgol", window_days=1.0)
-            candidate = coarse_fine_bls_search(t, f)
-            feats = extract_candidate_features(t, f, q_raw[:len(t)], candidate)
+            t, f, ferr, q, trend = detrend_lightcurve(t_raw, f_raw, ferr_raw, q_raw, method="savgol", window_days=1.0)
+            candidate = coarse_fine_bls_search(t, f, grid_type="uniform_freq")
+            feats = extract_candidate_features(t, f, q, candidate)
     except Exception as e:
         candidate = {}
         feats = {col: 0.0 for col in FEATURE_COLS}
@@ -44,22 +45,44 @@ def process_private_star_file(path):
     return {"star_id": star_id, "candidate": candidate, "feats": feats}
 
 
-def run_fast_private_inference(private_dir, output_csv="submission_redoc.csv"):
+def run_private_inference(private_dir=None, output_csv="submission_redoc.csv"):
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    bench_path = os.path.join(base_dir, "dev_benchmark_predictions.csv")
+    data_dir = os.path.join(base_dir, "data")
 
-    assert os.path.exists(bench_path), f"Benchmark features file {bench_path} not found!"
+    if private_dir is None:
+        private_dir = os.path.join(data_dir, "private")
 
-    # 1. Fit classifier instantaneously on benchmark features
-    print("Loading pre-calculated training features for fast model fit...")
-    df_fit = pd.read_csv(bench_path)
-    
-    clf = ExoplanetCandidateClassifier(model_type="hist_gb")
-    clf.fit(df_fit, df_fit["has_planet"].values)
+    if not os.path.exists(private_dir):
+        raise FileNotFoundError(f"Mandatory Private dataset directory missing: {private_dir}")
+
+    # 1. Fit classifier on combined Train + Dev features with locked threshold
+    print("Loading pre-processed candidate training features...")
+    df_train = process_dataset_cached(
+        os.path.join(data_dir, "train"),
+        os.path.join(data_dir, "train_labels.csv"),
+        os.path.join(data_dir, "train_truth.csv"),
+        cache_name="train_features.csv"
+    )
+    df_dev = process_dataset_cached(
+        os.path.join(data_dir, "dev"),
+        os.path.join(data_dir, "dev_labels.csv"),
+        os.path.join(data_dir, "dev_truth.csv"),
+        cache_name="dev_features.csv"
+    )
+
+    locked_thr, _ = run_oof_cv_threshold_selection(df_train, model_type="hist_gb")
+    print(f"Locked Decision Threshold from Train OOF CV: {locked_thr:.2f}")
+
+    df_all = pd.concat([df_train, df_dev], ignore_index=True)
+    clf = ExoplanetCandidateClassifier(model_type="hist_gb", random_state=42)
+    clf.fit(df_all, df_all["has_planet"].values)
     print("ML Candidate Classifier trained and ready for private set inference!")
 
     # 2. Process private set stars in parallel across 8 CPU cores
     paths = sorted(glob.glob(os.path.join(private_dir, "*.parquet")))
+    if len(paths) == 0:
+        raise FileNotFoundError(f"No parquet files found in private directory: {private_dir}")
+
     print(f"\nProcessing {len(paths)} private evaluation set stars in {private_dir}...")
 
     t0 = time.time()
@@ -77,7 +100,7 @@ def run_fast_private_inference(private_dir, output_csv="submission_redoc.csv"):
 
         feats_df = pd.DataFrame([feats])
         prob = float(clf.predict_proba(feats_df)[0])
-        hit = prob >= 0.52  # Optimal decision threshold tuned on Dev set
+        hit = prob >= locked_thr  # Use locked threshold from Train OOF CV
 
         rec = {
             "star_id": sid,
@@ -125,7 +148,4 @@ def run_fast_private_inference(private_dir, output_csv="submission_redoc.csv"):
 
 
 if __name__ == "__main__":
-    base_d = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    priv_d = os.path.join(base_d, "data", "private")
-    out_csv = os.path.join(base_d, "submission_redoc.csv")
-    run_fast_private_inference(priv_d, output_csv=out_csv)
+    run_private_inference()

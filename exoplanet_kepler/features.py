@@ -1,5 +1,6 @@
 """
 Feature extraction module for machine learning candidate vetting.
+Extracts astrophysical, signal-to-noise, and vetting features.
 """
 
 import numpy as np
@@ -18,11 +19,19 @@ def extract_candidate_features(t: np.ndarray, f: np.ndarray, q: np.ndarray, cand
     snr = candidate.get("snr", 0.0)
     n_transits_exp = candidate.get("n_transits_expected", 0)
     n_in_transit = candidate.get("n_in_transit_points", 0)
+    r_half = candidate.get("alias_ratio_half", 0.0)
+    r_double = candidate.get("alias_ratio_double", 0.0)
+    r_triple = candidate.get("alias_ratio_triple", 0.0)
 
-    scatter_ppm = float(np.nanstd(f) * 1e6) if f is not None and len(f) > 0 else 0.0
-    depth_to_scatter = depth_ppm / scatter_ppm if (scatter_ppm > 0 and not np.isnan(depth_ppm)) else 0.0
+    # Out-of-transit scatter evaluation
+    if f is not None and len(f) > 0:
+        scatter_std_ppm = float(np.nanstd(f) * 1e6)
+        mad = np.nanmedian(np.abs(f - np.nanmedian(f)))
+        scatter_mad_ppm = float(1.4826 * mad * 1e6)
+    else:
+        scatter_std_ppm, scatter_mad_ppm = 0.0, 0.0
 
-    # Radius ratio estimate: (Rp / R*)^2 = depth (in fraction) => Rp / R* = sqrt(depth_ppm / 1e6)
+    depth_to_scatter = depth_ppm / scatter_mad_ppm if (scatter_mad_ppm > 0 and not np.isnan(depth_ppm)) else 0.0
     radius_ratio = float(np.sqrt(max(0.0, depth_ppm) / 1e6)) if not np.isnan(depth_ppm) else 0.0
 
     # Scientific vetting metrics
@@ -47,7 +56,11 @@ def extract_candidate_features(t: np.ndarray, f: np.ndarray, q: np.ndarray, cand
         "odd_even_diff_sig": float(odd_even_diff_sig),
         "sec_depth_ratio": float(sec_ratio),
         "quarter_recurrence": float(quarter_rec),
-        "scatter_ppm": float(scatter_ppm),
+        "scatter_ppm": float(scatter_std_ppm),
+        "scatter_mad_ppm": float(scatter_mad_ppm),
         "depth_to_scatter": float(depth_to_scatter),
-        "radius_ratio": float(radius_ratio)
+        "radius_ratio": float(radius_ratio),
+        "alias_ratio_half": float(r_half),
+        "alias_ratio_double": float(r_double),
+        "alias_ratio_triple": float(r_triple)
     }
