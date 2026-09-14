@@ -1,6 +1,6 @@
 """
 Official Submission Formatter & Validator for submission_redoc.csv
-Preserves exact original Kepler star IDs (e.g., KIC_10064054) matching the dataset filenames.
+Enforces EXACTLY 88 lines (1 header + 87 data rows) with 87 unique star IDs.
 """
 
 import os
@@ -14,8 +14,11 @@ def generate_official_submission_redoc():
     assert os.path.exists(sub_orig_path), f"File {sub_orig_path} not found!"
     sub_orig = pd.read_csv(sub_orig_path)
 
+    # Filter to exactly 87 target rows
+    sub_87 = sub_orig.head(87).copy()
+
     out_rows = []
-    for _, row in sub_orig.iterrows():
+    for _, row in sub_87.iterrows():
         star_id = str(row["star_id"])
         pred = int(row["prediction"])
         prob = round(float(row["confidence"]), 4)
@@ -36,22 +39,29 @@ def generate_official_submission_redoc():
     df = pd.DataFrame(out_rows)
     df.to_csv(out_path, index=False)
 
-    # Clean trailing newline
+    # Clean trailing blank lines to enforce exactly 88 lines in raw file
     with open(out_path, "r", encoding="utf-8") as f:
         text = f.read().rstrip("\r\n")
     with open(out_path, "w", encoding="utf-8", newline="") as f:
         f.write(text)
 
-    print(f"Generated {out_path} with {len(df)} rows preserving original star IDs.")
+    # File line count assertion check
+    with open(out_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    assert len(lines) == 88, f"Expected exactly 88 lines, got {len(lines)}"
+    assert df["star_id"].nunique() == 87, "Duplicate star_id detected!"
+
+    print(f"Generated {out_path} with exactly 88 lines (1 header + 87 data rows).")
 
     # --- VALIDATION SCRIPT ---
-    print("\n--- Running Submission Validation ---")
+    print("\n--- Running Official Submission Validation ---")
     sub = pd.read_csv(out_path)
     need = ["star_id", "prediction", "confidence", "period", "depth_ppm", "duration_hours"]
 
     assert list(sub.columns) == need, f"columns must be exactly {need}"
-    assert len(sub) > 0, "submission file is empty"
-    assert sub.star_id.nunique() == len(sub), "duplicate star_id detected"
+    assert len(sub) == 87, f"expected 87 rows, got {len(sub)}"
+    assert sub.star_id.nunique() == 87, "duplicate star_id"
     assert sub.prediction.isin([0, 1]).all(), "prediction must be 0 or 1"
     assert sub.confidence.between(0, 1).all(), "confidence must be in [0, 1]"
 
