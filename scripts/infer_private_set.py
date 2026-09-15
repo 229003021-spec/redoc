@@ -100,7 +100,7 @@ def run_private_inference(private_dir=None, output_csv="submission_redoc.csv"):
 
         feats_df = pd.DataFrame([feats])
         prob = float(clf.predict_proba(feats_df)[0])
-        hit = prob >= locked_thr  # Use locked threshold from Train OOF CV
+        hit = prob >= 0.50  # Only mark high-confidence candidates (prob >= 0.50) as 1
 
         rec = {
             "star_id": sid,
